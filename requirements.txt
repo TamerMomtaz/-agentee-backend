@@ -21,3 +21,4 @@ python-dotenv>=1.0.0
 
 # Utilities
 pydantic>=2.0.0
+python-multipart
