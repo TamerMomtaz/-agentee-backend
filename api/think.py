@@ -1,7 +1,10 @@
 """
-🌊 A-GENTEE Think API
+🌊 A-GENTEE Think API v6.0 (Phase 1 memory-aware)
 Routes queries through the ensemble brain.
 Accepts text or audio input.
+
+Phase 1 change: passes current query to build_context_prompt()
+for semantic memory injection alongside recent conversations.
 """
 
 import os
@@ -51,12 +54,13 @@ async def think_text(req: ThinkRequest, request: Request):
     if not mind:
         raise HTTPException(status_code=503, detail="Mind not initialized")
 
-    # Build context from memory
+    # Build context from memory (Phase 1: now includes semantic search)
     context = ""
     if memory:
         try:
             context = await memory.build_context_prompt(
-                max_conversations=req.context_window
+                max_conversations=req.context_window,
+                query=req.query,  # Phase 1: enables semantic memory recall
             )
         except Exception as e:
             logger.warning(f"Context build failed (non-fatal): {e}")
@@ -86,7 +90,7 @@ async def think_text(req: ThinkRequest, request: Request):
         # Estimate cost
         cost = _estimate_cost(engine_used)
 
-        # Store in memory
+        # Store in memory (Phase 1: now also triggers insight extraction + embedding)
         if memory:
             try:
                 await memory.store_conversation(
