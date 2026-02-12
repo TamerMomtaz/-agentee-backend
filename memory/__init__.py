@@ -231,7 +231,7 @@ class TheMemory:
 
             client = AsyncAnthropic(api_key=self.anthropic_key)
             result = await client.messages.create(
-                model="claude-haiku-3-20240307",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=400,
                 system=(
                     "Extract insights from this conversation between Tee and A-GENTEE. "
@@ -476,7 +476,7 @@ class TheMemory:
             from anthropic import AsyncAnthropic
             client = AsyncAnthropic(api_key=self.anthropic_key)
             result = await client.messages.create(
-                model="claude-haiku-3-20240307",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=600,
                 system=(
                     "Summarize Tee's day with his AI assistant. Return JSON only: "
