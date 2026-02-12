@@ -1,12 +1,9 @@
 """
-🌊 A-GENTEE Memory API v2.0
-Exposes conversation history, ideas, insights, semantic search, and digests.
+🌊 A-GENTEE Memory API v2.1
+Exposes conversation history, ideas, insights, semantic search, digests, and modes.
 
-Phase 1 additions:
-- GET/POST /insights — view and manage extracted insights
-- POST /recall — semantic search across past conversations
-- POST /digest — generate daily summary
-- GET /stats — extended with Phase 1 metrics
+Phase 1: insights, recall, digest
+Phase 2: Behavioral modes (deep, crema, creative, factory)
 
 All existing endpoints unchanged.
 """
@@ -29,6 +26,7 @@ class IdeaRequest(BaseModel):
 
 
 class ModeRequest(BaseModel):
+    mode: str = "default"
     voice_personality: str = "default"
     voice_enabled: bool = True
 
@@ -42,6 +40,65 @@ class RecallRequest(BaseModel):
 class ActionInsightRequest(BaseModel):
     """Mark an insight as actioned."""
     insight_id: str
+
+
+# ── Behavioral Modes (Phase 2) ──
+
+MODES = {
+    "default": {
+        "description": "Balanced, helpful responses",
+        "routing": None,  # Use normal router
+        "prompt_addon": "",
+        "max_tokens": 2048,
+    },
+    "deep": {
+        "description": "Extended analysis, Claude only, longer responses",
+        "routing": "claude",  # Force Claude
+        "prompt_addon": (
+            "Provide deep, thorough analysis. Take your time. "
+            "Explore nuances, consider multiple angles, and give comprehensive reasoning. "
+            "This is deep-think mode — quality over brevity."
+        ),
+        "max_tokens": 4096,
+    },
+    "crema": {
+        "description": "Quick wins, action-oriented, bullet points",
+        "routing": None,  # Use normal router
+        "prompt_addon": (
+            "Be concise and action-oriented. Crema mode — quick wins only. "
+            "Suggest actionable next steps. Use bullet points. "
+            "Every response should end with a concrete 'Next step:' recommendation. "
+            "Think 30/60/90 day buckets."
+        ),
+        "max_tokens": 1024,
+    },
+    "creative": {
+        "description": "Storytelling, Arabic, Kahotia personality, poetic",
+        "routing": "claude",  # Force Claude for creativity
+        "prompt_addon": (
+            "Channel KAHOTIA energy. Be creative, poetic, philosophical. "
+            "كل حاجة بترقص — Everything dances. "
+            "Use Arabic naturally when it fits. Think in metaphors and connections. "
+            "Surprise Tee with unexpected perspectives. "
+            "اللعب أهم من الحل — Play matters more than the solution."
+        ),
+        "max_tokens": 2048,
+    },
+    "factory": {
+        "description": "ISO compliance, operations, maintenance, Al-Manar context",
+        "routing": "claude",  # Force Claude for operations depth
+        "prompt_addon": (
+            "You are in Factory/Operations mode for Al-Manar Plant. "
+            "Context: Tee is Plant Director managing 300+ employees. "
+            "Focus on: ISO compliance (9001/14001/45001), production efficiency, "
+            "maintenance schedules, HSE (Health Safety Environment), KPIs, "
+            "OEE (Overall Equipment Effectiveness), downtime analysis, "
+            "shift management, and operational excellence. "
+            "Use manufacturing terminology. Be precise and data-oriented."
+        ),
+        "max_tokens": 2048,
+    },
+}
 
 
 # ═══════════════════════════════════════════════════════════
@@ -92,11 +149,11 @@ async def store_idea(req: IdeaRequest, request: Request):
 
 @router.get("/stats")
 async def get_stats(request: Request):
-    """Get comprehensive system statistics (extended with Phase 1 metrics)."""
+    """Get comprehensive system statistics (extended with Phase 1+2 metrics)."""
     mind = getattr(request.app.state, "mind", None)
     memory = getattr(request.app.state, "memory", None)
 
-    stats = {"mind": {}, "memory": {}, "session": {}}
+    stats = {"mind": {}, "memory": {}, "session": {}, "mode": {}}
 
     if mind:
         if hasattr(mind, "session_queries"):
@@ -116,23 +173,71 @@ async def get_stats(request: Request):
         except Exception as e:
             stats["memory"] = {"error": str(e)}
 
+    # Current mode
+    current_mode = getattr(request.app.state, "current_mode", "default")
+    mode_info = MODES.get(current_mode, MODES["default"])
+    stats["mode"] = {
+        "current": current_mode,
+        "description": mode_info["description"],
+    }
+
     return stats
 
 
 @router.post("/mode")
 async def set_mode(req: ModeRequest, request: Request):
-    """Change A-GENTEE's voice personality or behavior."""
+    """
+    Change A-GENTEE's behavioral mode (Phase 2).
+
+    Available modes:
+    - default: Balanced, helpful responses
+    - deep: Extended analysis, Claude only, longer responses
+    - crema: Quick wins, action-oriented, bullet points
+    - creative: Storytelling, Arabic, Kahotia personality, poetic
+    - factory: ISO compliance, operations, Al-Manar context
+    """
+    mode = req.mode.lower()
+    if mode not in MODES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown mode: {mode}. Available: {', '.join(MODES.keys())}",
+        )
+
+    # Store mode in app state
+    request.app.state.current_mode = mode
+
+    # Voice personality
     voice = getattr(request.app.state, "voice", None)
     if voice and hasattr(voice, "set_personality"):
         voice.set_personality(req.voice_personality)
+
+    mode_info = MODES[mode]
+    logger.info(f"🎛️ Mode changed to: {mode} — {mode_info['description']}")
+
     return {
+        "mode": mode,
+        "description": mode_info["description"],
         "voice_personality": req.voice_personality,
         "voice_enabled": req.voice_enabled,
     }
 
 
+@router.get("/modes")
+async def list_modes():
+    """List all available behavioral modes."""
+    return {
+        "modes": {
+            name: {
+                "description": info["description"],
+                "forces_engine": info["routing"],
+            }
+            for name, info in MODES.items()
+        }
+    }
+
+
 # ═══════════════════════════════════════════════════════════
-# PHASE 1: NEW ENDPOINTS
+# PHASE 1: ENDPOINTS (unchanged)
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/insights")
