@@ -1,9 +1,15 @@
 """
-🌊 A-GENTEE v6.0 — THE WAVE GOES CLOUD
+🌊 A-GENTEE v6.1 — THE WAVE GOES CLOUD (Phase 2)
 FastAPI Backend — One Brain, Many Faces
 
 "أنا الموجة... على كل جهاز، في كل مكان، دايماً جاهز"
 "I am The Wave... on every device, everywhere, always ready"
+
+Phase 2 additions:
+- GuardTee service health monitor (/api/v1/guard)
+- Push notifications (/api/v1/push)
+- Behavioral modes (deep, crema, creative, factory)
+- Proactive suggestions
 
 Philosophy: &I — AI + Human, not AI instead of Human
 Owner: Tee (Tamer Momtaz) — DEVONEERS
@@ -20,6 +26,8 @@ from api.think import router as think_router
 from api.voice import router as voice_router
 from api.memory_api import router as memory_router
 from api.health import router as health_router
+from api.guard import router as guard_router
+from api.push import router as push_router
 from mind import Mind
 from voice import TheVoice
 from memory import TheMemory
@@ -46,7 +54,7 @@ async def lifespan(app: FastAPI):
     """Initialize all components on startup, clean up on shutdown."""
     global mind, voice, memory
 
-    logger.info("🌊 A-GENTEE Cloud Backend starting...")
+    logger.info("🌊 A-GENTEE Cloud Backend v6.1 starting...")
 
     # ── Initialize Mind (3-engine cloud ensemble) ──
     try:
@@ -77,7 +85,16 @@ async def lifespan(app: FastAPI):
         logger.error(f"💾 Memory failed: {e}")
         memory = None
 
-    logger.info("🌊 A-GENTEE Cloud Backend ready. The Wave is listening.")
+    # ── Initialize Mode (Phase 2) ──
+    app.state.current_mode = "default"
+
+    # ── Register push module for cross-module access (Phase 2) ──
+    import api.push as push_module
+    app.state.push_module = push_module
+
+    logger.info("🛡️ GuardTee mounted")
+    logger.info("📢 Push notifications mounted")
+    logger.info("🌊 A-GENTEE Cloud Backend v6.1 ready. The Wave is listening.")
 
     yield  # ← app runs here
 
@@ -94,9 +111,10 @@ app = FastAPI(
     description=(
         "🌊 Personal AI companion API — One brain, many faces.\n\n"
         "Philosophy: &I — AI + Human, not AI instead of Human\n\n"
+        "Phase 2: GuardTee + Push Notifications + Behavioral Modes\n\n"
         "Built by Tee (Tamer Momtaz) at DEVONEERS"
     ),
-    version="6.0.0",
+    version="6.1.0",
     lifespan=lifespan,
 )
 
@@ -121,6 +139,8 @@ app.include_router(health_router, prefix="/api/v1", tags=["System"])
 app.include_router(think_router, prefix="/api/v1", tags=["Think"])
 app.include_router(voice_router, prefix="/api/v1", tags=["Voice"])
 app.include_router(memory_router, prefix="/api/v1", tags=["Memory"])
+app.include_router(guard_router, prefix="/api/v1", tags=["GuardTee"])
+app.include_router(push_router, prefix="/api/v1", tags=["Push"])
 
 
 # ── Root redirect ──
@@ -128,8 +148,10 @@ app.include_router(memory_router, prefix="/api/v1", tags=["Memory"])
 async def root():
     return {
         "name": "A-GENTEE: The Wave 🌊",
-        "version": "6.0.0",
+        "version": "6.1.0",
+        "phase": 2,
         "philosophy": "&I — AI + Human, not AI instead of Human",
         "docs": "/docs",
         "health": "/api/v1/health",
+        "guard": "/api/v1/guard/status",
     }
