@@ -146,7 +146,7 @@ async def send_to_all_subscribers(
     Send a web push notification to ALL stored subscribers.
     Returns number of successfully sent notifications.
     """
-     _app = app or (request.app if request else None)
+    _app = app or (request.app if request else None)
     memory = getattr(_app.state, "memory", None) if _app else None
     if not memory or not memory.client:
         logger.warning("Push: memory not available")
