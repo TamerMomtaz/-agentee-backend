@@ -31,7 +31,7 @@ from api.push import router as push_router
 from mind import Mind
 from voice import TheVoice
 from memory import TheMemory
-
+from scheduler import start_scheduler, stop_scheduler
 # Load environment
 load_dotenv()
 
@@ -95,9 +95,9 @@ async def lifespan(app: FastAPI):
     logger.info("🛡️ GuardTee mounted")
     logger.info("📢 Push notifications mounted")
     logger.info("🌊 A-GENTEE Cloud Backend v6.1 ready. The Wave is listening.")
-
+    start_scheduler(app)
     yield  # ← app runs here
-
+    stop_scheduler()
     # ── Shutdown ──
     logger.info("🌊 A-GENTEE shutting down...")
     if memory:
