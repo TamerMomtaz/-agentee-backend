@@ -137,15 +137,17 @@ async def send_notification(msg: PushMessage, request: Request):
 async def send_to_all_subscribers(
     title: str,
     body: str,
-    request: Request,
+    request: Request = None,
     url: Optional[str] = None,
     tag: Optional[str] = None,
+    app=None,
 ) -> int:
     """
     Send a web push notification to ALL stored subscribers.
     Returns number of successfully sent notifications.
     """
-    memory = getattr(request.app.state, "memory", None)
+     _app = app or (request.app if request else None)
+    memory = getattr(_app.state, "memory", None) if _app else None
     if not memory or not memory.client:
         logger.warning("Push: memory not available")
         return 0
