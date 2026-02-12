@@ -1,5 +1,5 @@
 """
-🌀 OpenAI Adapter — Creative Fallback Engine
+🌀 OpenAI Adapter — Creative Fallback Engine (Phase 2: Mode-Aware)
 Used when Claude and Gemini are unavailable.
 """
 
@@ -19,7 +19,7 @@ class OpenAIAdapter:
         )
         self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
-    async def generate(self, query: str) -> str:
+    async def generate(self, query: str, max_tokens: int = 2048) -> str:
         """Generate a response using OpenAI."""
         try:
             response = await self.client.chat.completions.create(
@@ -34,7 +34,7 @@ class OpenAIAdapter:
                     },
                     {"role": "user", "content": query},
                 ],
-                max_tokens=2048,
+                max_tokens=max_tokens,
             )
 
             return response.choices[0].message.content
