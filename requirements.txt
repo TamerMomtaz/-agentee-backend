@@ -1,4 +1,4 @@
-# 🌊 A-GENTEE v6.0 — Cloud Backend Dependencies
+# 🌊 A-GENTEE v6.1 — Cloud Backend Dependencies
 # For Railway deployment
 
 # Web framework
@@ -10,11 +10,15 @@ anthropic>=0.40.0
 google-genai>=1.0.0
 openai>=1.50.0
 
-# HTTP client (for Supabase REST + ElevenLabs)
+# HTTP client (for Supabase REST + ElevenLabs + GuardTee)
 httpx>=0.27.0
 
 # Voice
 edge-tts>=6.1.0
+
+# Push Notifications (Phase 2)
+pywebpush>=2.0.0
+py-vapid>=1.9.0
 
 # Environment
 python-dotenv>=1.0.0
