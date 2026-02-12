@@ -140,7 +140,7 @@ app.include_router(think_router, prefix="/api/v1", tags=["Think"])
 app.include_router(voice_router, prefix="/api/v1", tags=["Voice"])
 app.include_router(memory_router, prefix="/api/v1", tags=["Memory"])
 app.include_router(guard_router, prefix="/api/v1", tags=["GuardTee"])
-app.include_router(push_router, prefix="/api/v1", tags=["Push"])
+app.include_router(push_router, prefix="/api/v1")
 
 
 # ── Root redirect ──
