@@ -1,10 +1,10 @@
 """
-🧠 A-GENTEE Mind v4.2 — Cloud Ensemble Brain
+🧠 A-GENTEE Mind v4.3 — Cloud Ensemble Brain (Phase 2: Mode-Aware)
 
 Cloud mode: Gemini Flash handles simple queries (replaces Ollama)
 3 engines: Claude (deep), Gemini (simple + data), OpenAI (fallback)
 
-Desktop mode: Same as current v4.2 with Ollama local
+Phase 2: think() now respects behavioral modes from app.state.current_mode
 """
 
 import os
@@ -23,7 +23,7 @@ logger = logging.getLogger("agentee.mind")
 class Mind:
     """The Ensemble Brain — routes queries to optimal engine."""
 
-    VERSION = "4.2-cloud"
+    VERSION = "4.3-cloud"
 
     def __init__(self, mode: str = "cloud"):
         self.mode = mode  # "cloud" or "desktop"
@@ -75,11 +75,36 @@ class Mind:
         if online == 0:
             raise RuntimeError("No engines available — check API keys in .env")
 
-    async def think(self, query: str, context: str = "") -> str:
-        """Route query to optimal engine, with fallback chain."""
+    async def think(
+        self,
+        query: str,
+        context: str = "",
+        mode: Optional[str] = None,
+        mode_config: Optional[dict] = None,
+    ) -> str:
+        """
+        Route query to optimal engine, with fallback chain.
 
-        # Route the query
+        Phase 2: mode parameter overrides routing and prompt behavior.
+        mode_config keys: routing, prompt_addon, max_tokens
+        """
+
+        # Route the query (normal routing)
         target_engine, category = self.router.route(query)
+
+        # Phase 2: Mode override
+        prompt_addon = ""
+        max_tokens = 2048
+
+        if mode_config:
+            # Force engine if mode specifies it
+            forced_engine = mode_config.get("routing")
+            if forced_engine and forced_engine in self.engines:
+                target_engine = forced_engine
+                category = f"{category}+{mode}"
+
+            prompt_addon = mode_config.get("prompt_addon", "")
+            max_tokens = mode_config.get("max_tokens", 2048)
 
         # In cloud mode, Ollama routes become Gemini
         if target_engine == "ollama":
@@ -88,13 +113,18 @@ class Mind:
         # Build fallback chain
         fallback_order = self._get_fallback_chain(target_engine)
 
-        # Enrich query with context if available
+        # Enrich query with context + mode addon
         enriched = query
+        parts = []
+
         if context:
-            enriched = (
-                f"[CONTEXT FROM MEMORY]\n{context}\n[END CONTEXT]\n\n"
-                f"User query: {query}"
-            )
+            parts.append(f"[CONTEXT FROM MEMORY]\n{context}\n[END CONTEXT]")
+
+        if prompt_addon:
+            parts.append(f"[MODE INSTRUCTION]\n{prompt_addon}\n[END MODE]")
+
+        parts.append(f"User query: {query}")
+        enriched = "\n\n".join(parts)
 
         # Try each engine in order
         for engine_name in fallback_order:
@@ -103,12 +133,13 @@ class Mind:
                 continue
 
             try:
-                response = await adapter.generate(enriched)
+                response = await adapter.generate(enriched, max_tokens=max_tokens)
                 self.session_queries[engine_name] += 1
                 self.router.last_category = category
 
+                mode_tag = f" [{mode}]" if mode and mode != "default" else ""
                 logger.info(
-                    f"🧩 [{category.upper()}] → "
+                    f"🧩 [{category.upper()}]{mode_tag} → "
                     f"{'🧠' if engine_name == 'claude' else '💎' if engine_name == 'gemini' else '🌀'} "
                     f"[{engine_name.upper()}]"
                 )
