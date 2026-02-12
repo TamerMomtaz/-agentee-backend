@@ -1,7 +1,9 @@
 """
-🧠 Claude Adapter — Premium Reasoning Engine
+🧠 Claude Adapter — Premium Reasoning Engine (Phase 2: Mode-Aware)
 Deep reasoning, Arabic creative writing, complex queries.
 Includes Tee's full context as system prompt.
+
+Phase 2: generate() now accepts max_tokens parameter from mode config.
 """
 
 import os
@@ -68,12 +70,12 @@ class ClaudeAdapter:
         )
         self.model = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
 
-    async def generate(self, query: str) -> str:
-        """Generate a response using Claude."""
+    async def generate(self, query: str, max_tokens: int = 2048) -> str:
+        """Generate a response using Claude. max_tokens configurable per mode."""
         try:
             response = await self.client.messages.create(
                 model=self.model,
-                max_tokens=2048,
+                max_tokens=max_tokens,
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": query}],
             )
