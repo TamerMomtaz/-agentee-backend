@@ -1,10 +1,10 @@
 """
-🌊 A-GENTEE Think API v6.0 (Phase 1 memory-aware)
+🌊 A-GENTEE Think API v6.1 (Phase 2: Mode-Aware)
 Routes queries through the ensemble brain.
 Accepts text or audio input.
 
-Phase 1 change: passes current query to build_context_prompt()
-for semantic memory injection alongside recent conversations.
+Phase 1: passes current query to build_context_prompt()
+Phase 2: reads current_mode from app.state and passes mode_config to mind.think()
 """
 
 import os
@@ -28,12 +28,14 @@ class ThinkRequest(BaseModel):
     query: str
     language: str = "auto"
     context_window: int = 5  # How many past messages to include
+    mode: Optional[str] = None  # Override mode for this request
 
 
 class ThinkResponse(BaseModel):
     response: str
     engine: str
     category: str
+    mode: str
     cost: float
     transcript: Optional[str] = None  # Only for audio input
     voice_id: Optional[str] = None    # ID to fetch voice response
@@ -46,7 +48,7 @@ class ThinkResponse(BaseModel):
 async def think_text(req: ThinkRequest, request: Request):
     """
     Send a text query to A-GENTEE's ensemble brain.
-    Routes to the optimal engine based on content.
+    Routes to the optimal engine based on content and current mode.
     """
     mind = getattr(request.app.state, "mind", None)
     memory = getattr(request.app.state, "memory", None)
@@ -54,13 +56,20 @@ async def think_text(req: ThinkRequest, request: Request):
     if not mind:
         raise HTTPException(status_code=503, detail="Mind not initialized")
 
-    # Build context from memory (Phase 1: now includes semantic search)
+    # Determine active mode (request override > app.state > default)
+    current_mode = req.mode or getattr(request.app.state, "current_mode", "default")
+
+    # Get mode config from memory_api MODES dict
+    from api.memory_api import MODES
+    mode_config = MODES.get(current_mode, MODES["default"])
+
+    # Build context from memory (Phase 1+2: now includes semantic search + proactive)
     context = ""
     if memory:
         try:
             context = await memory.build_context_prompt(
                 max_conversations=req.context_window,
-                query=req.query,  # Phase 1: enables semantic memory recall
+                query=req.query,
             )
         except Exception as e:
             logger.warning(f"Context build failed (non-fatal): {e}")
@@ -70,7 +79,12 @@ async def think_text(req: ThinkRequest, request: Request):
         # Capture engine stats before
         stats_before = dict(mind.session_queries) if hasattr(mind, "session_queries") else {}
 
-        response = await mind.think(req.query, context=context)
+        response = await mind.think(
+            req.query,
+            context=context,
+            mode=current_mode,
+            mode_config=mode_config,
+        )
 
         # Detect which engine was used
         engine_used = "unknown"
@@ -90,7 +104,7 @@ async def think_text(req: ThinkRequest, request: Request):
         # Estimate cost
         cost = _estimate_cost(engine_used)
 
-        # Store in memory (Phase 1: now also triggers insight extraction + embedding)
+        # Store in memory (Phase 1: triggers insight extraction + embedding)
         if memory:
             try:
                 await memory.store_conversation(
@@ -98,6 +112,7 @@ async def think_text(req: ThinkRequest, request: Request):
                     response=response,
                     engine=engine_used,
                     category=category_used,
+                    mode=current_mode,
                 )
             except Exception as e:
                 logger.warning(f"Memory store failed (non-fatal): {e}")
@@ -115,6 +130,7 @@ async def think_text(req: ThinkRequest, request: Request):
             response=response,
             engine=engine_used,
             category=category_used,
+            mode=current_mode,
             cost=cost,
             voice_id=voice_id,
             timestamp=datetime.now(timezone.utc).isoformat(),
