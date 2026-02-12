@@ -1,12 +1,11 @@
 """
-💾 A-GENTEE Memory v2.0 — Cloud Edition (Phase 1: Persistent Memory)
+💾 A-GENTEE Memory v2.1 — Cloud Edition (Phase 2: Proactive Memory)
 Uses Supabase as primary storage via REST API (httpx).
 
-Phase 1 additions:
-- Insight extraction (decisions, tasks, ideas from conversations)
-- Semantic search via embeddings (OpenAI text-embedding-3-small → pgvector)
-- Enhanced context building (memory injection before every /think)
-- Daily digest generation
+Phase 1: Insight extraction, semantic search, digests
+Phase 2 additions:
+- get_proactive_suggestions() — stale tasks, cross-project connections, continuity prompts
+- get_stats() extended with Phase 2 tables (guardtee_checks)
 
 Backward compatible — all existing endpoints keep working.
 """
@@ -15,7 +14,7 @@ import os
 import json
 import uuid
 import logging
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 from typing import Optional, List, Dict
 
 import httpx
@@ -26,7 +25,7 @@ logger = logging.getLogger("agentee.memory")
 class TheMemory:
     """Cloud memory — Supabase REST API for persistent storage."""
 
-    VERSION = "2.0"
+    VERSION = "2.1"
 
     def __init__(self):
         self.supabase_url = os.getenv("SUPABASE_URL", "")
@@ -72,7 +71,7 @@ class TheMemory:
         try:
             resp = await self.client.get("/agentee_conversations?select=id&limit=1")
             if resp.status_code == 200:
-                logger.info("💾 Memory v2.0 active — Supabase connected")
+                logger.info("💾 Memory v2.1 active — Supabase connected")
             else:
                 logger.warning(f"💾 Supabase check: {resp.status_code}")
         except Exception as e:
@@ -156,7 +155,7 @@ class TheMemory:
             return []
 
     # ═══════════════════════════════════════════════════════════
-    # CONTEXT BUILDING (Phase 1 — enhanced memory injection)
+    # CONTEXT BUILDING (Phase 1+2 — enhanced with proactive)
     # ═══════════════════════════════════════════════════════════
 
     async def build_context_prompt(
@@ -170,6 +169,7 @@ class TheMemory:
         1. Recent conversations (continuity)
         2. Active insights (unactioned tasks, recent decisions)
         3. Semantic matches (if query provided + embeddings available)
+        4. Proactive suggestions (Phase 2)
         """
         sections = []
 
@@ -210,10 +210,118 @@ class TheMemory:
             except Exception as e:
                 logger.debug(f"Semantic context skipped: {e}")
 
+        # 4. Proactive suggestions (Phase 2)
+        try:
+            suggestions = await self.get_proactive_suggestions()
+            if suggestions:
+                lines = ["[Proactive suggestions for Tee]"]
+                for s in suggestions:
+                    lines.append(f"- 💡 {s}")
+                sections.append("\n".join(lines))
+        except Exception as e:
+            logger.debug(f"Proactive suggestions skipped: {e}")
+
         if not sections:
             return ""
 
         return "\n\n".join(sections)
+
+    # ═══════════════════════════════════════════════════════════
+    # PROACTIVE SUGGESTIONS (Phase 2)
+    # ═══════════════════════════════════════════════════════════
+
+    async def get_proactive_suggestions(self) -> List[str]:
+        """
+        Find actionable suggestions to inject into context:
+        1. Stale tasks — insights unactioned for >3 days
+        2. Cross-project connections — insights touching 2+ projects
+        3. Continuity prompts — "You discussed X yesterday, want to continue?"
+        """
+        suggestions = []
+        if not self.client:
+            return suggestions
+
+        three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        # 1. Stale tasks (unactioned insights >3 days old)
+        try:
+            resp = await self.client.get(
+                "/agentee_insights",
+                params={
+                    "select": "insight_type,content,project_tags,created_at",
+                    "actioned": "eq.false",
+                    "insight_type": "eq.task",
+                    "created_at": f"lt.{three_days_ago}",
+                    "order": "created_at.asc",
+                    "limit": 3,
+                },
+            )
+            if resp.status_code == 200:
+                stale = resp.json()
+                for task in stale:
+                    content = task.get("content", "")[:100]
+                    tags = task.get("project_tags", [])
+                    tag_str = f" ({', '.join(tags)})" if tags else ""
+                    suggestions.append(
+                        f"Stale task{tag_str}: \"{content}\" — still open for 3+ days"
+                    )
+        except Exception as e:
+            logger.debug(f"Stale tasks check failed: {e}")
+
+        # 2. Cross-project connections (insights with 2+ project tags)
+        try:
+            resp = await self.client.get(
+                "/agentee_insights",
+                params={
+                    "select": "insight_type,content,project_tags",
+                    "actioned": "eq.false",
+                    "order": "created_at.desc",
+                    "limit": 20,
+                },
+            )
+            if resp.status_code == 200:
+                all_insights = resp.json()
+                for ins in all_insights:
+                    tags = ins.get("project_tags", [])
+                    if len(tags) >= 2:
+                        content = ins.get("content", "")[:80]
+                        suggestions.append(
+                            f"Cross-project connection ({', '.join(tags)}): \"{content}\""
+                        )
+                        if len(suggestions) >= 5:
+                            break
+        except Exception as e:
+            logger.debug(f"Cross-project check failed: {e}")
+
+        # 3. Continuity prompts — yesterday's key topics
+        try:
+            resp = await self.client.get(
+                "/agentee_conversations",
+                params={
+                    "select": "query,category",
+                    "timestamp": f"gte.{yesterday}",
+                    "order": "timestamp.desc",
+                    "limit": 5,
+                },
+            )
+            if resp.status_code == 200:
+                yesterday_convs = resp.json()
+                if yesterday_convs:
+                    topics = set()
+                    for conv in yesterday_convs:
+                        cat = conv.get("category", "")
+                        q = conv.get("query", "")[:60]
+                        if cat not in ("simple", "default", "unknown") and q:
+                            topics.add(q)
+                    for topic in list(topics)[:2]:
+                        suggestions.append(
+                            f"Yesterday you discussed: \"{topic}\" — want to continue?"
+                        )
+        except Exception as e:
+            logger.debug(f"Continuity check failed: {e}")
+
+        return suggestions[:5]  # Cap at 5 suggestions
 
     # ═══════════════════════════════════════════════════════════
     # INSIGHTS (Phase 1 — extract decisions/tasks/ideas)
@@ -405,7 +513,7 @@ class TheMemory:
                 json={
                     "query_embedding": embedding,
                     "match_count": limit,
-                    "match_threshold": 0.65,
+                    "match_threshold": 0.5,  # Lowered from 0.65 per Phase 1 known issue
                 },
                 headers={
                     "apikey": self.supabase_key,
@@ -550,11 +658,11 @@ class TheMemory:
             return []
 
     # ═══════════════════════════════════════════════════════════
-    # STATS (extended with Phase 1 counts)
+    # STATS (extended with Phase 2 tables)
     # ═══════════════════════════════════════════════════════════
 
     async def get_stats(self) -> Dict:
-        """Get memory statistics including Phase 1 tables."""
+        """Get memory statistics including Phase 1+2 tables."""
         stats = {
             "status": "disconnected",
             "version": self.VERSION,
@@ -563,6 +671,8 @@ class TheMemory:
             "insights": 0,
             "embeddings": 0,
             "digests": 0,
+            "guard_checks": 0,
+            "push_subscriptions": 0,
             "embeddings_enabled": self._embed_client is not None,
             "insights_enabled": self.anthropic_key is not None,
         }
@@ -576,6 +686,8 @@ class TheMemory:
                 ("agentee_insights", "insights"),
                 ("agentee_embeddings", "embeddings"),
                 ("agentee_digests", "digests"),
+                ("guardtee_checks", "guard_checks"),
+                ("push_subscriptions", "push_subscriptions"),
             ]:
                 try:
                     resp = await self.client.get(
