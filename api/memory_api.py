@@ -223,9 +223,11 @@ async def set_mode(req: ModeRequest, request: Request):
 
 
 @router.get("/modes")
-async def list_modes():
-    """List all available behavioral modes."""
+async def list_modes(request: Request):
+    """List all available behavioral modes and current active mode."""
+    current = getattr(request.app.state, "current_mode", "default")
     return {
+        "current_mode": current,
         "modes": {
             name: {
                 "description": info["description"],
