@@ -141,7 +141,11 @@ async def store_idea(req: IdeaRequest, request: Request):
         raise HTTPException(status_code=503, detail="Memory not initialized")
     try:
         idea_id = await memory.store_idea(idea=req.idea, category=req.category)
+        if not idea_id:
+            raise HTTPException(status_code=500, detail="Failed to store idea in database")
         return {"stored": True, "id": idea_id, "category": req.category}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Idea store error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
