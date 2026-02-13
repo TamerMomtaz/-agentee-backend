@@ -119,16 +119,16 @@ app = FastAPI(
 )
 
 # ── CORS (allow PWA frontend from anywhere) ──
+# ── CORS (allow PWA frontend) ──
+# NOTE: CORSMiddleware does NOT support wildcard patterns like "https://*.vercel.app"
+# in allow_origins — use allow_origin_regex for subdomain matching.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:5173",
-        "https://agentee-frontend-4amg.vercel.app",
-        "https://*.vercel.app",
-        "https://*.github.io",
-        "https://*.devoneers.com",
     ],
+    allow_origin_regex=r"https://.*\.(vercel\.app|github\.io|devoneers\.com)$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
