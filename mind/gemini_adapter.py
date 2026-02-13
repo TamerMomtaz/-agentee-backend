@@ -21,10 +21,11 @@ class GeminiAdapter:
 
     async def generate(self, query: str, max_tokens: int = 2048) -> str:
         """Generate a response using Gemini."""
+        import asyncio
         try:
-            # google-genai uses sync API, wrap it
             config = {"max_output_tokens": max_tokens}
-            response = self.client.models.generate_content(
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
                 model=self.model,
                 contents=query,
                 config=config,
