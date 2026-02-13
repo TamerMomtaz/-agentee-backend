@@ -124,10 +124,10 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:5173",
+        "https://agentee-frontend.vercel.app",
         "https://*.vercel.app",
         "https://*.github.io",
         "https://*.devoneers.com",
-        "*",  # During development — tighten later
     ],
     allow_credentials=True,
     allow_methods=["*"],
