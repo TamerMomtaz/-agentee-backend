@@ -623,23 +623,25 @@ class TheMemory:
     # IDEAS (existing — unchanged)
     # ═══════════════════════════════════════════════════════════
 
-    async def store_idea(self, idea: str, category: str = "general") -> str:
-        """Store a new idea."""
+    async def store_idea(self, idea: str, category: str = "general") -> Optional[str]:
+        """Store a new idea. Returns idea_id on success, None on failure."""
         idea_id = str(uuid.uuid4())
         if not self.client:
-            return idea_id
+            logger.warning("Store idea: no Supabase client")
+            return None
         try:
             resp = await self.client.post(
                 "/agentee_ideas",
                 json={"id": idea_id, "idea": idea, "category": category},
             )
             if resp.status_code not in (200, 201):
-                logger.warning(f"Store idea: Supabase returned {resp.status_code} — {resp.text[:200]}")
-                return idea_id
+                logger.error(f"Store idea failed: Supabase {resp.status_code} — {resp.text[:300]}")
+                return None
             logger.info(f"💡 Idea stored: {idea_id} [{category}]")
+            return idea_id
         except Exception as e:
-            logger.warning(f"Store idea failed: {e}")
-        return idea_id
+            logger.warning(f"Store idea exception: {e}")
+            return None
 
     async def get_ideas(
         self, category: Optional[str] = None, limit: int = 20
