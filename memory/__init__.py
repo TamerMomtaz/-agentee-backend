@@ -629,10 +629,14 @@ class TheMemory:
         if not self.client:
             return idea_id
         try:
-            await self.client.post(
+            resp = await self.client.post(
                 "/agentee_ideas",
                 json={"id": idea_id, "idea": idea, "category": category},
             )
+            if resp.status_code not in (200, 201):
+                logger.warning(f"Store idea: Supabase returned {resp.status_code} — {resp.text[:200]}")
+                return idea_id
+            logger.info(f"💡 Idea stored: {idea_id} [{category}]")
         except Exception as e:
             logger.warning(f"Store idea failed: {e}")
         return idea_id
