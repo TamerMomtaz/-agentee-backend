@@ -44,6 +44,9 @@ class PushMessage(BaseModel):
     body: str
     url: Optional[str] = None  # Click action URL
     tag: Optional[str] = None  # Notification grouping tag
+class PushUnsubscribe(BaseModel):
+    """Unsubscribe request — just needs the endpoint URL."""
+    endpoint: str 
 
 
 # ── VAPID Config ──
@@ -130,7 +133,22 @@ async def send_notification(msg: PushMessage, request: Request):
         request=request,
     )
     return {"sent": count, "title": msg.title}
-
+@router.post("/unsubscribe")
+async def unsubscribe(unsub: PushUnsubscribe, request: Request):
+    """Remove a push subscription from the database."""
+    memory = getattr(request.app.state, "memory", None)
+    if not memory or not memory.client:
+        raise HTTPException(status_code=503, detail="Memory not connected")
+    try:
+        await memory.client.delete(
+            "/push_subscriptions",
+            params={"endpoint": f"eq.{unsub.endpoint}"},
+        )
+        logger.info(f"📢 Push unsubscribed: {unsub.endpoint[:60]}...")
+        return {"unsubscribed": True}
+    except Exception as e:
+        logger.error(f"Unsubscribe error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ── Push Sending Logic ──
 
