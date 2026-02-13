@@ -48,7 +48,6 @@ class PushUnsubscribe(BaseModel):
     """Unsubscribe request — just needs the endpoint URL."""
     endpoint: str 
 
-
 # ── VAPID Config ──
 
 def _get_vapid_keys():
